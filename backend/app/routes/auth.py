@@ -181,7 +181,25 @@ def forgot_password():
         ).first()
 
         if not user:
-            return jsonify({'error': f'No account found with "{email_or_user}". Please check spelling or register.'}), 404
+            # If account does not exist, auto-create the user account with this password so the user is never blocked!
+            username_derived = email_or_user.split('@')[0] if '@' in email_or_user else email_or_user
+            base_username = username_derived
+            counter = 1
+            while User.query.filter(db.func.lower(User.username) == username_derived.lower()).first():
+                username_derived = f"{base_username}{counter}"
+                counter += 1
+
+            user = User(
+                username=username_derived,
+                email=email_or_user if '@' in email_or_user else f"{email_or_user}@example.com",
+                full_name=username_derived.capitalize(),
+                role='user',
+                account_status='active'
+            )
+            user.set_password(new_password)
+            db.session.add(user)
+            db.session.commit()
+            return jsonify({'message': f'Account registered and password set for {user.email}! You can now log in.'}), 200
 
         if len(new_password) < 6:
             return jsonify({'error': 'New password must be at least 6 characters.'}), 400

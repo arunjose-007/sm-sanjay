@@ -3,9 +3,8 @@ import tempfile
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# Cross-platform safe database storage (works on Windows, Linux, Vercel, Render)
 if os.environ.get('VERCEL'):
-    instance_dir = os.path.join(tempfile.gettempdir(), 'intelligent_assistant')
+    instance_dir = tempfile.gettempdir()
 else:
     instance_dir = os.path.join(basedir, 'instance')
 
@@ -38,13 +37,17 @@ load_dotenv_custom()
 
 db_file_path = os.path.abspath(os.path.join(instance_dir, 'livelihood_safety.db')).replace('\\', '/')
 
+if db_file_path.startswith('/'):
+    default_db_uri = 'sqlite:////' + db_file_path.lstrip('/')
+else:
+    default_db_uri = f'sqlite:///{db_file_path}'
+
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'intelligent-assistant-secret-key-2026')
     
-    # Absolute path for SQLite to prevent relative path errors on Windows / Vercel
     raw_db_url = os.environ.get('DATABASE_URL', '')
     if not raw_db_url or 'sqlite:///instance' in raw_db_url:
-        SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_file_path}"
+        SQLALCHEMY_DATABASE_URI = default_db_uri
     else:
         SQLALCHEMY_DATABASE_URI = raw_db_url
         
