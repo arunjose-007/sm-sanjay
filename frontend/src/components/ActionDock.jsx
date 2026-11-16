@@ -18,19 +18,19 @@ export default function ActionDock({
           onClick={onOpenAI}
           className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left group ${
             isAIActive
-              ? 'bg-purple-900/40 border-purple-400/80 shadow-lg shadow-purple-950/60'
-              : 'bg-slate-900/80 hover:bg-slate-800/80 border-purple-500/30 hover:border-purple-400/60 shadow-md'
+              ? 'bg-cyan-900/40 border-cyan-400/80 shadow-lg shadow-cyan-950/60'
+              : 'bg-slate-900/80 hover:bg-slate-800/80 border-cyan-500/30 hover:border-cyan-400/60 shadow-md'
           }`}
         >
-          <div className="w-10 h-10 rounded-lg bg-purple-600/20 border border-purple-500/40 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-            <Bot className="w-5 h-5 text-purple-400" />
+          <div className="w-10 h-10 rounded-lg bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+            <Bot className="w-5 h-5 text-cyan-400" />
           </div>
           <div className="overflow-hidden">
-            <div className="text-xs sm:text-sm font-semibold text-white group-hover:text-purple-300 transition-colors">
-              AI Assistant
+            <div className="text-xs sm:text-sm font-semibold text-white group-hover:text-cyan-300 transition-colors">
+              Grok AI Assistant
             </div>
-            <div className="text-[11px] text-purple-300/70 truncate">
-              Ask anything...
+            <div className="text-[11px] text-cyan-300/70 truncate">
+              xAI Fast Intelligence
             </div>
           </div>
         </button>

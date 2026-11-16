@@ -1,6 +1,205 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Send, Trash2, X, AlertCircle, CheckCircle, RefreshCw, Sparkles, Terminal } from 'lucide-react';
+import { 
+  Bot, Send, Trash2, X, AlertCircle, CheckCircle2, RefreshCw, 
+  Sparkles, Zap, Cpu, Compass, CloudSun, Sprout, Fish, Truck, 
+  PhoneCall, Briefcase, Landmark, Copy, Square, Plus, MessageSquare,
+  ChevronDown, ChevronRight, Menu, Maximize2, Minimize2, ExternalLink
+} from 'lucide-react';
 import { api } from '../services/api';
+
+// Safe & Lightweight Custom Markdown Renderer for Code, Bold, Lists, Links, Quotes
+function FormattedMessage({ content }) {
+  const [copiedCodeIdx, setCopiedCodeIdx] = useState(null);
+
+  if (!content) return null;
+
+  // Split content by code blocks ```lang ... ```
+  const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', value: content.substring(lastIndex, match.index) });
+    }
+    parts.push({
+      type: 'code',
+      lang: match[1] || 'plaintext',
+      code: match[2].trimEnd()
+    });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < content.length) {
+    parts.push({ type: 'text', value: content.substring(lastIndex) });
+  }
+
+  const handleCopyCode = (code, idx) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCodeIdx(idx);
+    setTimeout(() => setCopiedCodeIdx(null), 2000);
+  };
+
+  const renderInlineFormatted = (rawText) => {
+    // Process lines for headers, lists, quotes, inline code, bold, links
+    const lines = rawText.split('\n');
+    return lines.map((line, lIdx) => {
+      const trimmed = line.trim();
+
+      // Headers
+      if (trimmed.startsWith('### ')) {
+        return (
+          <h4 key={lIdx} className="text-xs sm:text-sm font-bold text-cyan-300 mt-2 mb-1 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            {renderSpans(trimmed.substring(4))}
+          </h4>
+        );
+      }
+      if (trimmed.startsWith('## ')) {
+        return (
+          <h3 key={lIdx} className="text-sm sm:text-base font-extrabold text-white mt-2.5 mb-1.5">
+            {renderSpans(trimmed.substring(3))}
+          </h3>
+        );
+      }
+      if (trimmed.startsWith('# ')) {
+        return (
+          <h2 key={lIdx} className="text-base sm:text-lg font-black text-white mt-3 mb-2 border-b border-cyan-500/20 pb-1">
+            {renderSpans(trimmed.substring(2))}
+          </h2>
+        );
+      }
+
+      // Blockquotes
+      if (trimmed.startsWith('> ')) {
+        return (
+          <blockquote key={lIdx} className="border-l-2 border-cyan-500/70 pl-2.5 my-1 text-slate-300 italic bg-cyan-950/20 py-0.5 rounded-r">
+            {renderSpans(trimmed.substring(2))}
+          </blockquote>
+        );
+      }
+
+      // Bullet lists
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        return (
+          <div key={lIdx} className="flex items-start gap-2 ml-1.5 my-0.5">
+            <span className="text-cyan-400 font-bold mt-0.5 leading-none">•</span>
+            <span className="flex-1">{renderSpans(trimmed.substring(2))}</span>
+          </div>
+        );
+      }
+
+      // Numbered lists: e.g. "1. " or "2. "
+      const numMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+      if (numMatch) {
+        return (
+          <div key={lIdx} className="flex items-start gap-2 ml-1.5 my-0.5">
+            <span className="text-cyan-400 font-semibold text-[11px] min-w-[16px]">{numMatch[1]}.</span>
+            <span className="flex-1">{renderSpans(numMatch[2])}</span>
+          </div>
+        );
+      }
+
+      // Empty line
+      if (trimmed === '') {
+        return <div key={lIdx} className="h-1.5" />;
+      }
+
+      // Standard paragraph line
+      return (
+        <div key={lIdx} className="my-0.5">
+          {renderSpans(line)}
+        </div>
+      );
+    });
+  };
+
+  const renderSpans = (text) => {
+    // Process `inline code`, **bold**, [link](url)
+    const elements = [];
+    const inlineRegex = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g;
+    let last = 0;
+    let m;
+
+    while ((m = inlineRegex.exec(text)) !== null) {
+      if (m.index > last) {
+        elements.push(text.substring(last, m.index));
+      }
+      const token = m[0];
+      if (token.startsWith('`') && token.endsWith('`')) {
+        elements.push(
+          <code key={m.index} className="bg-slate-800/90 text-cyan-300 font-mono text-[11px] px-1.5 py-0.5 rounded border border-cyan-500/20">
+            {token.slice(1, -1)}
+          </code>
+        );
+      } else if (token.startsWith('**') && token.endsWith('**')) {
+        elements.push(
+          <strong key={m.index} className="text-white font-bold">
+            {token.slice(2, -2)}
+          </strong>
+        );
+      } else if (token.startsWith('[') && token.includes('](')) {
+        const linkMatch = token.match(/\[([^\]]+)\]\(([^)]+)\)/);
+        if (linkMatch) {
+          elements.push(
+            <a
+              key={m.index}
+              href={linkMatch[2]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-medium inline-flex items-center gap-0.5"
+            >
+              {linkMatch[1]}
+              <ExternalLink className="w-2.5 h-2.5 inline" />
+            </a>
+          );
+        }
+      }
+      last = m.index + token.length;
+    }
+    if (last < text.length) {
+      elements.push(text.substring(last));
+    }
+    return elements;
+  };
+
+  return (
+    <div className="space-y-1.5 text-xs sm:text-[13px] leading-relaxed text-slate-200">
+      {parts.map((p, idx) => {
+        if (p.type === 'code') {
+          return (
+            <div key={idx} className="my-2.5 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 font-mono text-xs shadow-inner">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 text-[10px] text-slate-400">
+                <span className="uppercase font-semibold tracking-wider text-cyan-400">{p.lang}</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyCode(p.code, idx)}
+                  className="flex items-center gap-1 hover:text-white transition px-1.5 py-0.5 rounded hover:bg-slate-800"
+                >
+                  {copiedCodeIdx === idx ? (
+                    <>
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Copy code</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <pre className="p-3 text-slate-100 overflow-x-auto text-[11px] leading-5 whitespace-pre">
+                <code>{p.code}</code>
+              </pre>
+            </div>
+          );
+        }
+        return <div key={idx}>{renderInlineFormatted(p.value)}</div>;
+      })}
+    </div>
+  );
+}
 
 export default function AIAssistantWidget({
   isOpen,
@@ -8,328 +207,739 @@ export default function AIAssistantWidget({
   moduleContext = 'general',
   currentUser
 }) {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      sender: 'ai',
-      text: "Hello! I am your Intelligent Assistant. Ask me anything about job schemes, marine weather, fishing advisories, or road safety.",
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
+  // Conversations State (ChatGPT Style)
+  const [conversations, setConversations] = useState([]);
+  const [currentConversationId, setCurrentConversationId] = useState(null);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Models & Engines State
+  const [availableModels, setAvailableModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState('auto');
+  const [aiStatus, setAIStatus] = useState(null);
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
+
+  // Chat State
+  const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [aiStatus, setAiStatus] = useState(null);
-  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [copiedMsgId, setCopiedMsgId] = useState(null);
+  const [abortController, setAbortController] = useState(null);
+
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    if (isOpen) {
-      checkOllama();
-      loadHistory();
-    }
-  }, [isOpen, moduleContext]);
-
-  useEffect(() => {
     scrollToBottom();
-  }, [messages, loading]);
+  }, [messages, isStreaming]);
 
-  const checkOllama = async () => {
-    setCheckingStatus(true);
+  // Load models catalog and status on mount
+  const refreshAIInfo = async () => {
+    setIsRefreshingStatus(true);
     try {
-      const status = await api.getAIStatus();
-      setAiStatus(status);
-    } catch (e) {
-      setAiStatus({
-        online: false,
-        message: 'Could not connect to backend AI bridge.'
-      });
-    } finally {
-      setCheckingStatus(false);
-    }
-  };
-
-  const loadHistory = async () => {
-    try {
-      const res = await api.getChatHistory(currentUser?.id, moduleContext);
-      if (res.messages && res.messages.length > 0) {
-        const formatted = [];
-        res.messages.forEach((m, idx) => {
-          formatted.push({
-            id: `hist-u-${idx}`,
-            sender: 'user',
-            text: m.user_message,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          });
-          formatted.push({
-            id: `hist-a-${idx}`,
-            sender: 'ai',
-            text: m.ai_response,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          });
-        });
-        setMessages(formatted);
+      const [modelsData, statusData] = await Promise.all([
+        api.getAIModels().catch(() => null),
+        api.getAIStatus().catch(() => null)
+      ]);
+      if (modelsData?.models) {
+        setAvailableModels(modelsData.models);
+      }
+      if (statusData) {
+        setAIStatus(statusData);
       }
     } catch (e) {
-      // Use initial message if history load fails
+      // fallback
+    } finally {
+      setIsRefreshingStatus(false);
     }
   };
 
-  const handleSendMessage = async (customPrompt) => {
+  // Load conversations list from backend
+  const loadConversations = async () => {
+    try {
+      const res = await api.getConversations(currentUser?.id);
+      if (res?.conversations) {
+        setConversations(res.conversations);
+        // If no active conversation, pick the first one or start fresh
+        if (!currentConversationId && res.conversations.length > 0) {
+          selectConversation(res.conversations[0].id);
+        }
+      }
+    } catch (e) {
+      // quiet fallback
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      refreshAIInfo();
+      loadConversations();
+    }
+  }, [isOpen, currentUser]);
+
+  // Select a conversation from sidebar
+  const selectConversation = async (convId) => {
+    setCurrentConversationId(convId);
+    setShowSidebar(false);
+    try {
+      const res = await api.getConversation(convId);
+      if (res?.conversation) {
+        const mapped = (res.conversation.messages || []).map(m => ({
+          id: m.id || Math.random(),
+          sender: m.role === 'user' ? 'user' : 'ai',
+          text: m.content,
+          model: m.model,
+          provider: m.provider
+        }));
+        setMessages(mapped);
+      }
+    } catch (e) {
+      // fallback
+    }
+  };
+
+  // Start a fresh new chat
+  const handleNewChat = async () => {
+    try {
+      const res = await api.createConversation({
+        title: 'New Chat',
+        module_context: moduleContext,
+        model: selectedModel,
+        user_id: currentUser?.id
+      });
+      if (res?.conversation) {
+        setConversations(prev => [res.conversation, ...prev]);
+        setCurrentConversationId(res.conversation.id);
+        setMessages([]);
+        setShowSidebar(false);
+      }
+    } catch (e) {
+      setCurrentConversationId(null);
+      setMessages([]);
+      setShowSidebar(false);
+    }
+  };
+
+  // Delete a conversation
+  const handleDeleteConversation = async (e, convId) => {
+    e.stopPropagation();
+    try {
+      await api.deleteConversation(convId);
+      setConversations(prev => prev.filter(c => c.id !== convId));
+      if (currentConversationId === convId) {
+        setCurrentConversationId(null);
+        setMessages([]);
+      }
+    } catch (e) {
+      // fallback
+    }
+  };
+
+  // Stop Generation Handler
+  const handleStopGenerating = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+    setIsStreaming(false);
+  };
+
+  // Copy message text to clipboard
+  const handleCopyMessage = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMsgId(id);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
+
+  // Send Message (Streaming by default)
+  const handleSend = async (customPrompt) => {
     const textToSend = customPrompt || inputText;
-    if (!textToSend.trim() || loading) return;
+    if (!textToSend.trim() || isStreaming) return;
+
+    let convId = currentConversationId;
+    if (!convId) {
+      try {
+        const createRes = await api.createConversation({
+          title: textToSend.slice(0, 30),
+          module_context: moduleContext,
+          model: selectedModel,
+          user_id: currentUser?.id
+        });
+        if (createRes?.conversation) {
+          convId = createRes.conversation.id;
+          setCurrentConversationId(convId);
+          setConversations(prev => [createRes.conversation, ...prev]);
+        }
+      } catch (e) {
+        // proceed without convId
+      }
+    }
 
     const userMsg = {
       id: Date.now(),
       sender: 'user',
-      text: textToSend,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      text: textToSend.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages((prev) => [...prev, userMsg]);
-    if (!customPrompt) setInputText('');
-    setLoading(true);
+    setMessages(prev => [...prev, userMsg]);
+    setInputText('');
+    setIsStreaming(true);
+
+    // Placeholder for AI streaming message
+    const aiMsgId = Date.now() + 1;
+    const aiPlaceholder = {
+      id: aiMsgId,
+      sender: 'ai',
+      text: '',
+      model: selectedModel,
+      provider: 'Generating...',
+      streaming: true,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, aiPlaceholder]);
+
+    const controller = new AbortController();
+    setAbortController(controller);
+    const startTime = Date.now();
+
+    const historyPayload = messages.map(m => ({
+      role: m.sender === 'user' ? 'user' : 'assistant',
+      content: m.text
+    }));
 
     try {
-      const historyContext = messages.slice(-6).map(m => ({
-        sender: m.sender,
-        text: m.text
-      }));
-
-      const res = await api.chatWithAI(
-        textToSend,
+      await api.streamAIChat({
+        message: userMsg.text,
         moduleContext,
-        historyContext,
-        currentUser?.id
-      );
-
-      const aiMsg = {
-        id: Date.now() + 1,
-        sender: 'ai',
-        text: res.response || "No response received.",
-        source: res.offline_source,
-        model: res.model,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages((prev) => [...prev, aiMsg]);
+        history: historyPayload,
+        userId: currentUser?.id,
+        selectedModel,
+        conversationId: convId,
+        signal: controller.signal,
+        onChunk: (chunk, meta) => {
+          setMessages(prev =>
+            prev.map(m => {
+              if (m.id === aiMsgId) {
+                return {
+                  ...m,
+                  text: m.text + chunk,
+                  model: meta?.model || m.model,
+                  provider: meta?.provider || m.provider
+                };
+              }
+              return m;
+            })
+          );
+        },
+        onDone: (meta) => {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          setMessages(prev =>
+            prev.map(m => {
+              if (m.id === aiMsgId) {
+                return {
+                  ...m,
+                  streaming: false,
+                  elapsed: `${elapsed}s`,
+                  model: meta?.model || m.model,
+                  provider: meta?.provider || m.provider
+                };
+              }
+              return m;
+            })
+          );
+          setIsStreaming(false);
+          setAbortController(null);
+          // Refresh conversation list to get updated title
+          loadConversations();
+        },
+        onError: (err) => {
+          setMessages(prev =>
+            prev.map(m => {
+              if (m.id === aiMsgId) {
+                return {
+                  ...m,
+                  streaming: false,
+                  text: m.text || `Service Error: ${err.message}. Check your local Ollama or xAI Grok settings.`,
+                  isError: !m.text
+                };
+              }
+              return m;
+            })
+          );
+          setIsStreaming(false);
+          setAbortController(null);
+        }
+      });
     } catch (err) {
-      const errorMsg = {
-        id: Date.now() + 1,
-        sender: 'ai',
-        isError: true,
-        text: err.data?.error || err.message || "Failed to contact local Ollama service. Please check if Ollama is running.",
-        instructions: err.data?.instructions,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setLoading(false);
+      setMessages(prev =>
+        prev.map(m => {
+          if (m.id === aiMsgId) {
+            return {
+              ...m,
+              streaming: false,
+              text: m.text || `Unable to reach backend: ${err.message}`,
+              isError: true
+            };
+          }
+          return m;
+        })
+      );
+      setIsStreaming(false);
+      setAbortController(null);
     }
   };
 
-  const handleClearChat = async () => {
-    try {
-      await api.clearChatHistory();
-      setMessages([
-        {
-          id: Date.now(),
-          sender: 'ai',
-          text: "Chat history cleared. How can I help you today?",
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  // Regenerate last response
+  const handleRegenerate = () => {
+    if (isStreaming) return;
+    const lastUserMsg = [...messages].reverse().find(m => m.sender === 'user');
+    if (lastUserMsg) {
+      // Remove last assistant message
+      setMessages(prev => {
+        const lastIdx = prev.map(m => m.sender).lastIndexOf('ai');
+        if (lastIdx !== -1) {
+          return prev.slice(0, lastIdx);
         }
-      ]);
-    } catch (e) {}
+        return prev;
+      });
+      handleSend(lastUserMsg.text);
+    }
   };
 
   if (!isOpen) return null;
 
-  const quickPrompts = {
-    fisherman: [
-      "What is the best time for fishing?",
-      "Current wave height safety guidelines?",
-      "Coast guard distress frequency?"
-    ],
-    driver: [
-      "Find nearest 24/7 trauma care hospital",
-      "Highway night driving precautions",
-      "Road safety emergency helpline numbers"
-    ],
-    livelihood: [
-      "Eligibility criteria for PM-KISAN?",
-      "How to apply for PMMSY fishery subsidy?",
-      "Free agricultural drone skill certification"
-    ],
-    general: [
-      "What services does this app provide?",
-      "How does offline AI work with Ollama?",
-      "Emergency SOS action steps"
-    ]
-  };
-
-  const currentPrompts = quickPrompts[moduleContext] || quickPrompts.general;
+  // Starters cards for empty chat state
+  const starterPrompts = [
+    {
+      title: "💻 Python Code & Math",
+      desc: "Write algorithms, debug code, or solve complex calculations.",
+      prompt: "Write a complete Python script to track GPS coordinates, calculate distance between waypoints, and find the nearest emergency hospital."
+    },
+    {
+      title: "🛣️ Highway Road Safety",
+      desc: "Night driving, heavy fog, and emergency breakdown rules.",
+      prompt: "What are the essential defensive highway driving precautions for driving during heavy rain, fog, and night hours?"
+    },
+    {
+      title: "🌊 Fishermen Sea Advisory",
+      desc: "Marine weather, Beaufort wind scale & Coast Guard 1554.",
+      prompt: "What safety protocols and emergency communication equipment should coastal fishermen prepare before heading out into the deep sea?"
+    },
+    {
+      title: "🏛️ Government Welfare Schemes",
+      desc: "PM-KISAN, PMMSY Fisheries, PM SVANidhi, and Mudra loans.",
+      prompt: "Explain the eligibility, subsidy amount, and step-by-step application procedure for PM-KISAN and PMMSY fisheries scheme."
+    },
+    {
+      title: "🚨 Emergency Helplines & SOS",
+      desc: "All 4 registered helpline numbers & hospital response.",
+      prompt: "List all official emergency helpline phone numbers registered in this app and the immediate first-aid steps for road accidents."
+    },
+    {
+      title: "🌐 Tamil / தமிழ் வழிகாட்டுதல்",
+      desc: "Fluently supports Tamil & Tanglish inquiries.",
+      prompt: "விவசாயிகள் மற்றும் மீனவர்களுக்கான முக்கிய அரசு நலத்திட்டங்கள் மற்றும் உதவி எண்களை தமிழில் விவரிக்கவும்."
+    }
+  ];
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 w-[94vw] sm:w-[460px] h-[550px] max-h-[85vh] rounded-2xl glass-panel border border-sky-500/40 shadow-2xl flex flex-col overflow-hidden bg-slate-950/95 backdrop-blur-xl animate-fade-in">
+    <div className={`fixed z-50 transition-all duration-300 ${
+      isExpanded 
+        ? 'inset-2 sm:inset-4 w-auto h-auto' 
+        : 'bottom-4 right-4 sm:bottom-6 sm:right-6 w-[95vw] sm:w-[680px] md:w-[740px] h-[640px] max-h-[90vh]'
+    } glass-panel rounded-3xl overflow-hidden shadow-2xl border border-cyan-500/40 flex flex-col bg-[#070e1d]/95 backdrop-blur-2xl text-slate-100`}>
       
-      {/* Top Header matching reference image: [Bot Icon] AI Assistant [Close] */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 border-b border-sky-500/30">
+      {/* Top Main Navigation Bar */}
+      <div className="bg-slate-950/95 px-4 py-3 border-b border-cyan-500/30 flex items-center justify-between shrink-0">
+        
+        {/* Left: Sidebar Toggle & Brand */}
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400 shadow-sm">
-            <Bot className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <span>AI Assistant</span>
-              <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/30 capitalize">
-                {moduleContext}
-              </span>
-            </h3>
-            <div className="flex items-center gap-1.5 text-[10px]">
-              <span className={`w-1.5 h-1.5 rounded-full ${aiStatus?.online ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-              <span className="text-slate-400">
-                {aiStatus?.online ? `Ollama (${aiStatus.configured_model})` : 'Ollama Offline Mode'}
-              </span>
+          <button
+            onClick={() => setShowSidebar(!showSidebar)}
+            title="Chat History"
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition relative"
+          >
+            <Menu className="w-5 h-5 text-cyan-400" />
+            {conversations.length > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-cyan-400"></span>
+            )}
+          </button>
+
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/30">
+              <Bot className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-sm tracking-tight text-white">AI Assistant</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
+                  ChatGPT & Grok
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        {/* Center: Model Selector Dropdown */}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="bg-slate-900 border border-cyan-500/40 text-cyan-300 hover:text-white text-xs font-semibold rounded-xl px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition cursor-pointer appearance-none max-w-[200px] sm:max-w-[260px] truncate"
+            >
+              <option value="auto">✨ Auto (Fastest Engine)</option>
+              
+              <optgroup label="☁️ xAI Grok (Cloud API)">
+                <option value="xai:grok-3-mini">xAI Grok 3 Mini (Default Fast)</option>
+                <option value="xai:grok-2-latest">xAI Grok 2 (High Reasoning)</option>
+                <option value="xai:grok-beta">xAI Grok Beta (Ultra-Fast)</option>
+              </optgroup>
+
+              {availableModels.filter(m => m.provider === 'ollama').length > 0 && (
+                <optgroup label="🦙 Ollama (Local AI Models)">
+                  {availableModels.filter(m => m.provider === 'ollama').map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-cyan-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+
           <button
-            onClick={checkOllama}
-            title="Refresh Ollama status"
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            onClick={refreshAIInfo}
+            title="Refresh AI engine status"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition"
           >
-            <RefreshCw className={`w-4 h-4 ${checkingStatus ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingStatus ? 'animate-spin text-cyan-400' : ''}`} />
           </button>
+        </div>
+
+        {/* Right: Window Controls */}
+        <div className="flex items-center gap-1">
           <button
-            onClick={handleClearChat}
-            title="Clear Chat"
-            className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition"
+            onClick={handleNewChat}
+            title="New Chat"
+            className="hidden sm:flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 transition mr-1"
           >
-            <Trash2 className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Chat</span>
           </button>
+
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            title={isExpanded ? "Restore Size" : "Maximize"}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          >
+            {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+
           <button
             onClick={onClose}
             title="Close Assistant"
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
+
       </div>
 
-      {/* Ollama Status Alert if Offline */}
-      {aiStatus && !aiStatus.online && (
-        <div className="bg-amber-950/40 border-b border-amber-500/30 px-3 py-2 text-[11px] text-amber-200 flex items-start gap-2">
-          <Terminal className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <span>Local Ollama is not detected at <code>localhost:11434</code>. Run in terminal:</span>
-            <div className="font-mono bg-black/40 text-sky-300 px-2 py-0.5 rounded mt-1 select-all border border-sky-500/20">
-              ollama run llama3.2:3b
+      {/* Main Container with Sidebar + Chat Area */}
+      <div className="flex-1 flex overflow-hidden relative">
+
+        {/* Collapsible Left History Sidebar (ChatGPT Style) */}
+        <div className={`absolute sm:relative z-20 h-full w-64 bg-slate-950/95 sm:bg-slate-950/70 border-r border-cyan-500/20 flex flex-col transition-all duration-300 ${
+          showSidebar ? 'translate-x-0' : '-translate-x-full sm:hidden'
+        }`}>
+          {/* New Chat Button */}
+          <div className="p-3 border-b border-slate-800">
+            <button
+              onClick={handleNewChat}
+              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs shadow-lg shadow-cyan-600/30 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Conversation</span>
+            </button>
+          </div>
+
+          {/* Conversations List */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin">
+            <div className="px-2 py-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+              Recent Chats
+            </div>
+
+            {conversations.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500 px-3">
+                No conversations yet. Start a new chat anytime!
+              </div>
+            ) : (
+              conversations.map((conv) => {
+                const isActive = conv.id === currentConversationId;
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => selectConversation(conv.id)}
+                    className={`group flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition ${
+                      isActive
+                        ? 'bg-cyan-950/70 text-cyan-300 border border-cyan-500/40 font-semibold'
+                        : 'text-slate-300 hover:bg-slate-900/80 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate flex-1 min-w-0 pr-1">
+                      <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-cyan-400' : 'text-slate-500'}`} />
+                      <span className="truncate text-xs">{conv.title || 'Conversation'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteConversation(e, conv.id)}
+                      title="Delete chat"
+                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Sidebar Footer: Engine Status Badges */}
+          <div className="p-3 border-t border-slate-800 bg-slate-950/90 text-[11px] space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">xAI Grok Cloud:</span>
+              <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${
+                aiStatus?.xai_grok?.configured 
+                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' 
+                  : 'bg-amber-950 text-amber-400 border border-amber-500/30'
+              }`}>
+                {aiStatus?.xai_grok?.configured ? 'Active' : 'Unconfigured'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Ollama Local:</span>
+              <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${
+                aiStatus?.ollama?.online 
+                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' 
+                  : 'bg-red-950 text-red-400 border border-red-500/30'
+              }`}>
+                {aiStatus?.ollama?.online ? `${aiStatus.ollama.installed_count || 0} Models` : 'Offline'}
+              </span>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Chat Messages Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
-          >
-            <div className="flex items-start gap-2 max-w-[85%]">
-              {msg.sender === 'ai' && (
-                <div className="w-6 h-6 rounded-md bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0 mt-1">
-                  <Bot className="w-3.5 h-3.5 text-sky-400" />
+        {/* Right Main Chat Canvas */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950/50">
+
+          {/* Messages Stream */}
+          <div className="flex-1 p-3 sm:p-5 overflow-y-auto space-y-4 scrollbar-thin">
+            
+            {messages.length === 0 ? (
+              // Empty State - ChatGPT Style Welcome Hero & Capability Starter Cards
+              <div className="max-w-2xl mx-auto py-6 space-y-6">
+                <div className="text-center space-y-2">
+                  <div className="inline-flex p-3 rounded-2xl bg-gradient-to-tr from-cyan-600/30 to-blue-600/30 border border-cyan-500/40 text-cyan-300 shadow-xl mb-1">
+                    <Sparkles className="w-8 h-8 text-cyan-400 animate-pulse" />
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                    How can I assist you today?
+                  </h2>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    Ask anything about Python coding, mathematical reasoning, highway defensive driving, coastal marine weather, PM-KISAN schemes, or emergency SOS.
+                  </p>
                 </div>
-              )}
-              
-              <div
-                className={`p-3 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-md ${
-                  msg.sender === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-none shadow-blue-900/30'
-                    : msg.isError
-                    ? 'bg-red-950/70 border border-red-500/40 text-red-200 rounded-bl-none'
-                    : 'bg-slate-800/90 border border-slate-700/60 text-slate-100 rounded-bl-none'
-                }`}
+
+                {/* 6 Starter Prompt Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {starterPrompts.map((card, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSend(card.prompt)}
+                      className="p-3 rounded-2xl bg-slate-900/80 hover:bg-cyan-950/40 border border-slate-800 hover:border-cyan-500/50 text-left transition group shadow-sm flex flex-col justify-between"
+                    >
+                      <div className="font-semibold text-xs text-slate-100 group-hover:text-cyan-300 mb-1">
+                        {card.title}
+                      </div>
+                      <div className="text-[11px] text-slate-400 leading-snug">
+                        {card.desc}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              // Messages Feed
+              messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex gap-2.5 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  {/* AI Avatar */}
+                  {m.sender === 'ai' && (
+                    <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 border border-cyan-400/40 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-md">
+                      <Bot className="w-4 h-4" />
+                    </div>
+                  )}
+
+                  {/* Message Bubble */}
+                  <div className={`max-w-[88%] sm:max-w-[82%] rounded-2xl p-3.5 text-xs ${
+                    m.sender === 'user'
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-none shadow-md shadow-blue-600/20'
+                      : m.isError
+                      ? 'bg-red-950/80 text-red-200 border border-red-500/40 rounded-bl-none'
+                      : 'bg-slate-900/95 border border-slate-700/70 text-slate-100 rounded-bl-none shadow-lg'
+                  }`}>
+                    
+                    {/* Assistant Message Header Meta */}
+                    {m.sender === 'ai' && !m.isError && (
+                      <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-800/80 text-[10px] text-slate-400 font-mono">
+                        <span className="font-semibold text-cyan-300 flex items-center gap-1">
+                          <Cpu className="w-3 h-3 text-cyan-400" />
+                          {m.model || selectedModel}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {m.elapsed && (
+                            <span className="text-emerald-400 font-bold">⚡ {m.elapsed}</span>
+                          )}
+                          <span className="text-slate-500">{m.provider || 'AI Engine'}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Content (Formatted Markdown) */}
+                    <FormattedMessage content={m.text} />
+
+                    {/* Blinking Cursor during live streaming */}
+                    {m.streaming && (
+                      <span className="inline-block w-1.5 h-3.5 bg-cyan-400 animate-pulse ml-0.5 align-middle"></span>
+                    )}
+
+                    {/* Action Bar under AI Message (Copy / Regenerate) */}
+                    {m.sender === 'ai' && !m.streaming && !m.isError && (
+                      <div className="mt-2.5 pt-1.5 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMessage(m.text, m.id)}
+                            className="flex items-center gap-1 hover:text-white transition px-1.5 py-0.5 rounded hover:bg-slate-800"
+                          >
+                            {copiedMsgId === m.id ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                <span className="text-emerald-400 text-[10px]">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span className="text-[10px]">Copy</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleRegenerate}
+                            disabled={isStreaming}
+                            className="flex items-center gap-1 hover:text-cyan-300 transition px-1.5 py-0.5 rounded hover:bg-slate-800"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span className="text-[10px]">Regenerate</span>
+                          </button>
+                        </div>
+                        {m.timestamp && <span className="text-[10px] text-slate-500">{m.timestamp}</span>}
+                      </div>
+                    )}
+
+                  </div>
+
+                </div>
+              ))
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Stop Generating Floating Action Button */}
+          {isStreaming && (
+            <div className="flex justify-center -mb-2 z-10">
+              <button
+                type="button"
+                onClick={handleStopGenerating}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900 border border-red-500/50 text-red-300 hover:bg-red-950/60 text-xs font-semibold shadow-lg transition active:scale-95"
               >
-                <div className="whitespace-pre-line">{msg.text}</div>
-                {msg.instructions && (
-                  <div className="mt-2 pt-2 border-t border-red-500/30 font-mono text-[11px] text-red-300 whitespace-pre-wrap">
-                    {msg.instructions}
-                  </div>
-                )}
-                {msg.source && (
-                  <div className="mt-1 text-[9px] text-sky-400/70 text-right">
-                    via {msg.source}
-                  </div>
+                <Square className="w-3 h-3 fill-red-400 text-red-400" />
+                <span>Stop generating</span>
+              </button>
+            </div>
+          )}
+
+          {/* Message Input Area (ChatGPT Style Box) */}
+          <div className="p-3 sm:p-4 bg-slate-950/95 border-t border-cyan-500/20 shrink-0">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+              className="relative rounded-2xl bg-slate-900/90 border border-cyan-500/40 focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400/50 shadow-lg transition"
+            >
+              <textarea
+                ref={textareaRef}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                rows={1}
+                placeholder="Message Intelligent Assistant (Supports coding, math, Tamil, road safety...)"
+                className="w-full bg-transparent px-3.5 py-3 pr-14 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none resize-none max-h-32 min-h-[44px]"
+              />
+
+              {/* Send / Stop Button inside Input Box */}
+              <div className="absolute right-2.5 bottom-2 flex items-center">
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={handleStopGenerating}
+                    className="p-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white shadow-md transition"
+                    title="Stop Generating"
+                  >
+                    <Square className="w-4 h-4 fill-white" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!inputText.trim()}
+                    className="p-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:hover:bg-cyan-600 text-white shadow-md shadow-cyan-600/30 transition active:scale-95"
+                    title="Send message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
                 )}
               </div>
-            </div>
-            <span className="text-[10px] text-slate-500 mt-1 px-1">{msg.time}</span>
-          </div>
-        ))}
+            </form>
 
-        {loading && (
-          <div className="flex items-start gap-2">
-            <div className="w-6 h-6 rounded-md bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0">
-              <Bot className="w-3.5 h-3.5 text-sky-400" />
-            </div>
-            <div className="p-3 rounded-2xl bg-slate-800/80 border border-slate-700/60 text-slate-300 text-xs rounded-bl-none flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-              <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-              <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce"></span>
-              <span className="ml-1 text-[11px] text-slate-400">Ollama is thinking...</span>
+            <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400 px-1">
+              <span>Shift + Enter for new line. Powered by Ollama Local & xAI Grok.</span>
+              <span className="text-cyan-400 font-mono">
+                {selectedModel === 'auto' ? 'Auto Engine' : selectedModel}
+              </span>
             </div>
           </div>
-        )}
 
-        <div ref={messagesEndRef} />
-      </div>
+        </div>
 
-      {/* Suggested Quick Prompts */}
-      <div className="px-3 py-1.5 border-t border-slate-800 bg-slate-900/60 flex items-center gap-1.5 overflow-x-auto text-[11px]">
-        <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-        {currentPrompts.map((prompt, i) => (
-          <button
-            key={i}
-            onClick={() => handleSendMessage(prompt)}
-            className="shrink-0 px-2.5 py-1 rounded-full bg-slate-800 hover:bg-sky-600/30 text-slate-300 hover:text-sky-200 border border-slate-700 transition"
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
-
-      {/* Input bar matching reference image: [Type your question...] [Send >] */}
-      <div className="p-3 bg-slate-900/90 border-t border-sky-500/20">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSendMessage();
-          }}
-          className="flex items-center gap-2"
-        >
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type your question..."
-            disabled={loading}
-            className="flex-1 glass-input rounded-xl px-3.5 py-2 text-xs sm:text-sm text-white placeholder-slate-500"
-          />
-          <button
-            type="submit"
-            disabled={!inputText.trim() || loading}
-            className="p-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:hover:bg-blue-600 transition shadow-md shadow-blue-600/30 shrink-0"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
       </div>
 
     </div>

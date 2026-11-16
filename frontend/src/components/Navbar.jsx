@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, User, LogOut, Shield, ShieldAlert, LogIn } from 'lucide-react';
+import { Home, User, LogOut, Shield, ShieldAlert, LogIn, Sparkles } from 'lucide-react';
 import { LogoShield } from '../assets/illustrations';
 
 export default function Navbar({
@@ -9,6 +9,7 @@ export default function Navbar({
   onOpenAuth,
   onLogout,
   onOpenAdmin,
+  onOpenAI,
   isAdminView
 }) {
   return (
@@ -32,7 +33,7 @@ export default function Navbar({
         </div>
 
         {/* Right Navigation & User Controls */}
-        <div className="flex items-center gap-3 sm:gap-6 text-sm">
+        <div className="flex items-center gap-2 sm:gap-4 text-sm">
           
           {/* Dashboard Home Button */}
           <button
@@ -46,6 +47,17 @@ export default function Navbar({
             <Home className="w-4 h-4 text-sky-400" />
             <span className="hidden sm:inline">Dashboard</span>
           </button>
+
+          {/* AI Assistant Button */}
+          {onOpenAI && (
+            <button
+              onClick={onOpenAI}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs sm:text-sm bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/50 hover:to-blue-600/50 text-cyan-300 border border-cyan-500/40 shadow-sm transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+              <span>AI Chatbot</span>
+            </button>
+          )}
 
           {/* Admin Dashboard Pill */}
           {currentUser?.role === 'admin' && (

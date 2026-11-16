@@ -1,292 +1,519 @@
-import React, { useState } from 'react';
-import { AlertTriangle, PhoneCall, MapPin, Copy, Check, Clock, ShieldAlert, X, Radio } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  AlertTriangle, PhoneCall, MapPin, X, CheckCircle, MessageSquare,
+  Copy, ExternalLink, ShieldAlert, Radio, RefreshCw, Send, CheckCheck,
+  Compass, Search, Navigation, LocateFixed
+} from 'lucide-react';
 import { api } from '../services/api';
 
 export default function EmergencySOSModal({ isOpen, onClose, currentUser }) {
-  const [loading, setLoading] = useState(false);
-  const [reportResult, setReportResult] = useState(null);
+  const [status, setStatus] = useState('idle'); // 'idle' | 'locating' | 'ready'
+  const [coords, setCoords] = useState(null);
+  const [address, setAddress] = useState('Detecting current address...');
   const [copied, setCopied] = useState(false);
-  const [gpsError, setGpsError] = useState('');
+  const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
+  const [sendingStatus, setSendingStatus] = useState('');
 
-  const triggerSOS = async () => {
-    setLoading(true);
-    setGpsError('');
+  // Search & Change Place state
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-    // Capture GPS coordinates
+  const emergencyMapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef = useRef(null);
+
+  // Official Registered Emergency Contacts (4 numbers)
+  const REGISTERED_CONTACTS = [
+    { id: 1, name: 'Emergency Contact 1', number: '6374926569', formatted: '+91 6374926569' },
+    { id: 2, name: 'Emergency Contact 2', number: '7305800510', formatted: '+91 7305800510' },
+    { id: 3, name: 'Emergency Contact 3', number: '8122603655', formatted: '+91 8122603655' },
+    { id: 4, name: 'Emergency Contact 4', number: '7395893275', formatted: '+91 7395893275' }
+  ];
+
+  const allNumbersComma = REGISTERED_CONTACTS.map(c => c.number).join(',');
+  const allNumbersSemi = REGISTERED_CONTACTS.map(c => c.number).join(';');
+
+  // Popular quick location presets
+  const popularPlaces = [
+    { name: 'Chennai Central', lat: 13.0827, lon: 80.2707 },
+    { name: 'Coimbatore', lat: 11.0168, lon: 76.9558 },
+    { name: 'Salem Junction', lat: 11.6643, lon: 78.1460 },
+    { name: 'Madurai Meenakshi', lat: 9.9195, lon: 78.1193 },
+    { name: 'Trichy Central', lat: 10.7905, lon: 78.7047 },
+    { name: 'Kanyakumari Coast', lat: 8.0883, lon: 77.5385 }
+  ];
+
+  useEffect(() => {
+    if (isOpen) {
+      triggerLocationCapture();
+    } else {
+      setStatus('idle');
+      setCoords(null);
+      setSendingStatus('');
+      setShowSearch(false);
+      setSearchResults([]);
+    }
+  }, [isOpen]);
+
+  // Capture / Refresh Location (GPS first, IP Geolocation fallback)
+  const triggerLocationCapture = () => {
+    setIsRefreshingLocation(true);
+    setStatus('locating');
+    setSendingStatus('Detecting your live GPS coordinates...');
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-          await sendReport(lat, lon, `Accurate GPS (Accuracy: ${Math.round(position.coords.accuracy)}m)`);
+        (pos) => {
+          handleLocationAcquired(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
         },
-        async (error) => {
-          console.warn("Geolocation denied or unavailable:", error.message);
-          setGpsError("GPS permission denied or offline. Using regional default coordinates.");
-          // Fallback to Tamil Nadu baseline coordinates
-          await sendReport(11.1271, 78.6569, "Tamil Nadu Regional Center (GPS Fallback)");
+        async (err) => {
+          console.warn("GPS error, trying IP location fallback...", err.message);
+          // Try IP-based location fallback so real user city is detected
+          try {
+            const ipData = await api.getIPLocation();
+            if (ipData?.latitude && ipData?.longitude) {
+              handleLocationAcquired(ipData.latitude, ipData.longitude, 2000, ipData.display_name);
+              return;
+            }
+          } catch (e) { }
+          // Fallback regional center
+          handleLocationAcquired(11.1271, 78.6569, 500, 'Tamil Nadu, India');
         },
-        { timeout: 8000, enableHighAccuracy: true }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
       );
     } else {
-      await sendReport(11.1271, 78.6569, "Tamil Nadu Regional Center (No GPS Hardware)");
+      // Fallback
+      api.getIPLocation().then(ipData => {
+        if (ipData?.latitude && ipData?.longitude) {
+          handleLocationAcquired(ipData.latitude, ipData.longitude, 2000, ipData.display_name);
+        } else {
+          handleLocationAcquired(11.1271, 78.6569, 500, 'Tamil Nadu, India');
+        }
+      }).catch(() => {
+        handleLocationAcquired(11.1271, 78.6569, 500, 'Tamil Nadu, India');
+      });
     }
   };
 
-  const sendReport = async (latitude, longitude, address) => {
+  const handleLocationAcquired = async (lat, lon, acc, knownAddress = null) => {
+    const latStr = parseFloat(lat).toFixed(5);
+    const lonStr = parseFloat(lon).toFixed(5);
+    setCoords({ lat: latStr, lon: lonStr, acc: Math.round(acc || 15) });
+    setIsRefreshingLocation(false);
+    setStatus('ready');
+
+    if (knownAddress) {
+      setAddress(knownAddress);
+    } else {
+      setSendingStatus('Retrieving reverse-geocoded address...');
+      try {
+        const res = await api.reverseGeocode(parseFloat(lat), parseFloat(lon));
+        if (res.display_name) {
+          setAddress(res.display_name);
+        } else {
+          setAddress(`Coordinates: ${latStr}, ${lonStr}, Tamil Nadu, India`);
+        }
+      } catch {
+        setAddress(`Coordinates: ${latStr}, ${lonStr}, Tamil Nadu, India`);
+      }
+    }
+
+    // Update map marker if map exists
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([parseFloat(lat), parseFloat(lon)], 15);
+      if (markerRef.current) {
+        markerRef.current.setLatLng([parseFloat(lat), parseFloat(lon)]);
+      }
+    }
+
+    // Log distress into backend SQLite database
     try {
-      const res = await api.createEmergencyReport({
-        latitude,
-        longitude,
-        address,
-        message: `EMERGENCY SOS Triggered by ${currentUser?.full_name || currentUser?.username || 'Citizen'} via Intelligent Assistant`,
-        contact_info: currentUser?.email || 'Walk-in / App User',
-        user_id: currentUser?.id
+      await api.sendSOS({
+        user_id: currentUser?.id,
+        sender_name: currentUser?.full_name || currentUser?.username || 'User',
+        latitude: parseFloat(lat),
+        longitude: parseFloat(lon),
+        accuracy_meters: acc,
+        target_numbers: REGISTERED_CONTACTS.map(c => c.number)
       });
-      setReportResult(res);
-    } catch (err) {
-      console.error("Error creating SOS report", err);
-      // Even if network fails, construct local emergency details
-      setReportResult({
-        report: {
-          latitude,
-          longitude,
-          address,
-          created_at: new Date().toISOString(),
-          status: 'Recorded in Local Storage'
-        },
-        contacts: [
-          { service: 'Police Control', number: '100' },
-          { service: 'Medical Ambulance', number: '108' },
-          { service: 'Coast Guard SAR', number: '1554' },
-          { service: 'Highway Helpline', number: '1073' }
-        ]
-      });
-    } finally {
-      setLoading(false);
+      setSendingStatus('Live location updated & recorded in emergency database.');
+    } catch (e) {
+      setSendingStatus('Coordinates captured. Ready to dispatch device SMS.');
     }
   };
 
-  const copyCoordinates = () => {
-    if (reportResult?.report) {
-      const text = `${reportResult.report.latitude}, ${reportResult.report.longitude}`;
-      navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+  // Place Search
+  const handleSearchPlaces = async (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const res = await api.searchPlaces(searchQuery.trim(), coords?.lat, coords?.lon);
+      setSearchResults(res.results || []);
+    } catch (e) {
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
     }
   };
+
+  // Select place from search or quick preset
+  const handleSelectPlace = (place) => {
+    handleLocationAcquired(place.latitude || place.lat, place.longitude || place.lon, 25, place.display_name || place.name);
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  // Render Mini Emergency Map Preview with Click-to-Move
+  useEffect(() => {
+    if (status !== 'ready' || !coords || !emergencyMapRef.current) return;
+    let isMounted = true;
+
+    const renderMap = async () => {
+      try {
+        const L = window.L || (await import('leaflet')).default;
+        if (!isMounted || !emergencyMapRef.current) return;
+
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        }
+
+        const map = L.map(emergencyMapRef.current, {
+          center: [parseFloat(coords.lat), parseFloat(coords.lon)],
+          zoom: 14,
+          zoomControl: true,
+          attributionControl: false
+        });
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19
+        }).addTo(map);
+
+        const alertIcon = L.divIcon({
+          className: 'emergency-pin',
+          html: `
+            <div style="position:relative; width:34px; height:34px;">
+              <div style="position:absolute; inset:-8px; background:rgba(239,68,68,0.5); border-radius:50%; animation:ping 1.5s infinite;"></div>
+              <div style="width:34px; height:34px; background:#ef4444; border:3px solid white; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:16px; font-weight:bold; box-shadow:0 0 18px rgba(239,68,68,0.9); cursor:pointer;">
+                🚨
+              </div>
+            </div>
+          `,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+        });
+
+        const marker = L.marker([parseFloat(coords.lat), parseFloat(coords.lon)], {
+          icon: alertIcon,
+          draggable: true
+        }).addTo(map);
+
+        markerRef.current = marker;
+
+        // Allow user to click anywhere on map to change location!
+        map.on('click', (e) => {
+          handleLocationAcquired(e.latlng.lat, e.latlng.lng, 10);
+        });
+
+        // Allow user to drag marker
+        marker.on('dragend', (e) => {
+          const newPos = e.target.getLatLng();
+          handleLocationAcquired(newPos.lat, newPos.lng, 10);
+        });
+
+        mapInstanceRef.current = map;
+      } catch (err) {
+        console.warn("Mini map error:", err);
+      }
+    };
+
+    renderMap();
+
+    return () => {
+      isMounted = false;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [status]);
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-      
-      <div className="relative w-full max-w-xl rounded-2xl glass-panel border border-red-500/50 overflow-hidden shadow-2xl shadow-red-950/90 p-6 sm:p-8 bg-slate-950/95">
-        
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition"
-        >
-          <X className="w-5 h-5" />
-        </button>
+  const mapsUrl = coords ? `https://maps.google.com/?q=${coords.lat},${coords.lon}` : 'https://maps.google.com/?q=11.1271,78.6569';
 
-        {!reportResult ? (
-          /* Step 1: Trigger Screen */
-          <div className="text-center space-y-6">
-            <div className="mx-auto w-20 h-20 rounded-full bg-red-600/20 border-2 border-red-500/60 flex items-center justify-center text-red-500 shadow-2xl animate-sos">
-              <AlertTriangle className="w-10 h-10" />
+  // Emergency SMS text strictly containing all 4 numbers & live coordinates
+  const emergencySMSText = (
+    `🚨 EMERGENCY SOS ALERT! I need immediate help.\n` +
+    `📍 Location: ${address}\n` +
+    `🌐 Latitude: ${coords?.lat || '11.1271'}, Longitude: ${coords?.lon || '78.6569'}\n` +
+    `🗺 Google Maps Location: ${mapsUrl}\n` +
+    `📞 Registered Emergency Contacts: 6374926569, 7305800510, 8122603655, 7395893275`
+  );
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(emergencySMSText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+  };
+
+  // Device SMS URI for All 4 Contacts
+  const allContactsSmsUrl = `sms:${allNumbersComma}?body=${encodeURIComponent(emergencySMSText)}`;
+  const allContactsSmsUrlIOS = `sms:${allNumbersSemi}&body=${encodeURIComponent(emergencySMSText)}`;
+
+  const handleSendToAll = () => {
+    setSendingStatus('Launching device SMS application with all 4 contacts...');
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    window.location.href = isIOS ? allContactsSmsUrlIOS : allContactsSmsUrl;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/95 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div className="relative w-full max-w-xl glass-panel rounded-3xl border-2 border-red-500/70 p-5 sm:p-6 space-y-4 shadow-[0_0_70px_rgba(239,68,68,0.45)] my-auto max-h-[92vh] overflow-y-auto">
+
+        {/* Header */}
+        <div className="flex justify-between items-center pb-3 border-b border-red-500/30">
+          <div className="flex items-center gap-2 text-red-400 font-black text-sm tracking-widest uppercase">
+            <Radio className="w-5 h-5 text-red-500 animate-ping" />
+            <span>SOS Emergency Live Location Sharing</span>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {status === 'locating' && (
+          <div className="py-12 text-center space-y-4">
+            <div className="w-16 h-16 rounded-full border-4 border-red-500 border-t-transparent animate-spin mx-auto shadow-lg" />
+            <p className="text-base font-bold text-white tracking-wide">Acquiring Live Location...</p>
+            <p className="text-xs text-red-300">Detecting GPS satellite coordinates & reverse-geocoding place address</p>
+          </div>
+        )}
+
+        {status === 'ready' && (
+          <div className="space-y-3.5 animate-fade-in">
+
+            {/* Live Location & Address Summary */}
+            <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-red-500/40 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Compass className="w-4 h-4 text-red-400" />
+                  <span>Current GPS Location</span>
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  {/* Change Place / Search Toggle */}
+                  <button
+                    onClick={() => setShowSearch(!showSearch)}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/40 text-[11px] font-bold text-cyan-300 flex items-center gap-1 transition"
+                  >
+                    <Search className="w-3 h-3" />
+                    <span>{showSearch ? 'Hide Search' : 'Change Place'}</span>
+                  </button>
+
+                  {/* Detect GPS / Refresh */}
+                  <button
+                    onClick={triggerLocationCapture}
+                    disabled={isRefreshingLocation}
+                    title="Detect Current GPS Location"
+                    className="px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-[11px] font-bold text-red-300 flex items-center gap-1 transition"
+                  >
+                    <LocateFixed className={`w-3 h-3 ${isRefreshingLocation ? 'animate-spin' : ''}`} />
+                    <span>Detect GPS</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Location Input & Results Dropdown */}
+              {showSearch && (
+                <div className="pt-2 border-t border-slate-800 space-y-2 animate-fade-in">
+                  <form onSubmit={handleSearchPlaces} className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search city, town, or place (e.g. Marina Beach, Salem, Madurai)..."
+                      className="flex-1 bg-slate-950 border border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSearching}
+                      className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1"
+                    >
+                      <Search className="w-3 h-3" />
+                      <span>{isSearching ? 'Searching...' : 'Find'}</span>
+                    </button>
+                  </form>
+
+                  {/* Search Results */}
+                  {searchResults.length > 0 && (
+                    <div className="max-h-36 overflow-y-auto space-y-1 bg-slate-950/95 border border-cyan-500/30 rounded-xl p-1.5">
+                      {searchResults.map((r, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSelectPlace(r)}
+                          className="w-full text-left p-1.5 hover:bg-cyan-950/80 rounded-lg text-[11px] text-slate-200 hover:text-cyan-300 flex items-center gap-1.5 transition"
+                        >
+                          <MapPin className="w-3 h-3 text-cyan-400 shrink-0" />
+                          <span className="truncate">{r.display_name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Quick City Presets */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400 self-center">Quick Places:</span>
+                    {popularPlaces.map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSelectPlace(p)}
+                        className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-cyan-900 border border-slate-700 hover:border-cyan-500/50 text-[10px] text-slate-300 hover:text-cyan-300 transition"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-white space-y-1">
+                <div><b>GPS:</b> <span className="text-cyan-300 font-mono">{coords?.lat}, {coords?.lon}</span> (Accuracy: ±{coords?.acc}m)</div>
+                <div className="text-slate-300 text-[11px] leading-tight"><b>Address:</b> {address}</div>
+                <div className="pt-0.5">
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 font-bold underline"
+                  >
+                    <span>Open in Google Maps ({mapsUrl})</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <h2 className="text-2xl font-black text-white tracking-wide">
-                EMERGENCY SOS ALERT
-              </h2>
-              <p className="text-sm text-slate-300 mt-2 max-w-md mx-auto">
-                Need Help? Click below to immediately log your emergency coordinates and connect with local first responders.
+            {/* Interactive Emergency Map Preview (Click anywhere on map to set position) */}
+            <div className="relative h-40 rounded-2xl overflow-hidden border border-red-500/40 shadow-inner">
+              <div ref={emergencyMapRef} className="w-full h-full cursor-crosshair" />
+              <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-slate-950/90 border border-cyan-500/40 text-[10px] text-cyan-300 font-semibold backdrop-blur-md">
+                💡 Click anywhere on map to place emergency pin
+              </div>
+              <div className="absolute bottom-2 right-2 z-10 px-2.5 py-0.5 rounded-md bg-red-950/90 border border-red-500/50 text-[10px] text-red-300 font-bold backdrop-blur-md">
+                🚨 Live Distress Marker
+              </div>
+            </div>
+
+            {/* Prepared Emergency Message Preview */}
+            <div className="p-3 rounded-2xl bg-slate-950/90 border border-slate-700/80 space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Prepared Emergency SMS Alert:
+                </span>
+                <button
+                  onClick={copyToClipboard}
+                  className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copied ? 'Copied Alert!' : 'Copy Alert'}</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-200 font-mono whitespace-pre-wrap bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 max-h-24 overflow-y-auto">
+                {emergencySMSText}
               </p>
             </div>
 
-            {gpsError && (
-              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 text-left">
-                {gpsError}
-              </div>
-            )}
+            {/* PRIMARY ACTION: SEND TO ALL 4 EMERGENCY CONTACTS */}
+            <div className="space-y-2">
+              <button
+                onClick={handleSendToAll}
+                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(239,68,68,0.5)] transition active:scale-95"
+              >
+                <Send className="w-5 h-5" />
+                <span>SEND EMERGENCY SMS TO ALL 4 CONTACTS</span>
+              </button>
 
-            <button
-              onClick={triggerSOS}
-              disabled={loading}
-              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-extrabold text-lg flex items-center justify-center gap-3 shadow-2xl shadow-red-600/50 transform active:scale-95 transition-all disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <span className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></span>
-                  <span>Capturing GPS & Logging Distress...</span>
-                </>
-              ) : (
-                <>
-                  <PhoneCall className="w-6 h-6 animate-pulse" />
-                  <span>SEND SOS NOW</span>
-                </>
+              {sendingStatus && (
+                <p className="text-center text-[11px] text-emerald-400 font-semibold flex items-center justify-center gap-1">
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span>{sendingStatus}</span>
+                </p>
               )}
-            </button>
-
-            <p className="text-xs text-slate-400">
-              Your GPS coordinates will be captured and saved to the offline incident registry.
-            </p>
-          </div>
-        ) : (
-          /* Step 2: Confirmation & Hotlines Screen */
-          <div className="space-y-5 animate-fade-in">
-            <div className="flex items-center gap-3 pb-3 border-b border-red-500/30">
-              <div className="w-10 h-10 rounded-xl bg-red-600/20 border border-red-500/50 flex items-center justify-center text-red-400 shrink-0">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">
-                  Distress Logged Successfully
-                </h3>
-                <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> Saved in SQLite Emergency Reports
-                </span>
-              </div>
             </div>
 
-            {/* Captured Location Badge */}
-            <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-                  <MapPin className="w-4 h-4 text-red-400" />
-                  Captured Coordinates
-                </span>
-                <button
-                  onClick={copyCoordinates}
-                  className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 bg-sky-500/10 px-2 py-1 rounded-md border border-sky-500/30"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Copied!' : 'Copy Coords'}</span>
-                </button>
-              </div>
+            {/* Individual Registered Emergency Contacts */}
+            <div className="space-y-2 pt-1 border-t border-red-500/20">
+              <span className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider block text-left">
+                Registered Emergency Contacts:
+              </span>
 
-              <div className="text-sm font-mono font-bold text-white bg-black/40 p-2 rounded-lg border border-slate-800">
-                Lat: {reportResult.report.latitude.toFixed(5)}, Lon: {reportResult.report.longitude.toFixed(5)}
-              </div>
+              <div className="space-y-2">
+                {REGISTERED_CONTACTS.map((c) => {
+                  const indSmsUrl = `sms:${c.number}?body=${encodeURIComponent(emergencySMSText)}`;
+                  const indWaUrl = `https://wa.me/91${c.number}?text=${encodeURIComponent(emergencySMSText)}`;
+                  const indTelUrl = `tel:${c.number}`;
 
-              <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" />
-                  {new Date(reportResult.report.created_at).toLocaleString()}
-                </span>
-                <span className="text-slate-300 font-medium">{reportResult.report.address}</span>
-              </div>
-            </div>
+                  return (
+                    <div
+                      key={c.id}
+                      className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-white">{c.name}</div>
+                        <div className="text-slate-400 text-[11px]">{c.formatted}</div>
+                      </div>
 
-            {/* Registered Emergency Numbers */}
-            <div>
-              <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-                <span>Registered Emergency Contacts:</span>
-                <a
-                  href={`sms:6374926569,7305800510,8122603655,7395893275?body=${encodeURIComponent(
-                    `EMERGENCY SOS ALERT!\nLocation: https://maps.google.com/?q=${reportResult.report.latitude},${reportResult.report.longitude}\nLat: ${reportResult.report.latitude}, Lon: ${reportResult.report.longitude}\nPlease send help immediately!`
-                  )}`}
-                  className="text-xs text-sky-400 hover:text-sky-300 underline font-normal"
-                >
-                  Send SMS to All
-                </a>
-              </h4>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                {[
-                  { name: 'Contact 1', num: '6374926569' },
-                  { name: 'Contact 2', num: '7305800510' },
-                  { name: 'Contact 3', num: '8122603655' },
-                  { name: 'Contact 4', num: '7395893275' }
-                ].map((c, i) => (
-                  <a
-                    key={i}
-                    href={`tel:${c.num}`}
-                    className="p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-red-500/30 flex items-center justify-between transition group"
-                  >
-                    <div>
-                      <div className="text-[11px] text-slate-400">{c.name}</div>
-                      <div className="text-sm font-bold text-white group-hover:text-red-300">{c.num}</div>
+                      <div className="flex gap-1.5">
+                        <a
+                          href={indSmsUrl}
+                          className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] flex items-center gap-1 shadow"
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          <span>SMS</span>
+                        </a>
+
+                        <a
+                          href={indWaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow"
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          <span>WhatsApp</span>
+                        </a>
+
+                        <a
+                          href={indTelUrl}
+                          className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-[11px] flex items-center gap-1 shadow"
+                        >
+                          <PhoneCall className="w-3 h-3" />
+                          <span>Call</span>
+                        </a>
+                      </div>
                     </div>
-                    <PhoneCall className="w-4 h-4 text-red-400 group-hover:scale-110 transition" />
-                  </a>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            {/* Direct Dial Emergency Hotlines */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-                Click to Call National Emergency Responders:
-              </h4>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <a
-                  href="tel:108"
-                  className="p-3 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/40 flex items-center justify-between transition group"
-                >
-                  <div>
-                    <div className="text-xs text-rose-300 font-medium">Ambulance (Medical)</div>
-                    <div className="text-lg font-black text-white group-hover:text-rose-200">108</div>
-                  </div>
-                  <PhoneCall className="w-5 h-5 text-rose-400 group-hover:scale-110 transition" />
-                </a>
-
-                <a
-                  href="tel:100"
-                  className="p-3 rounded-xl bg-blue-950/40 hover:bg-blue-900/60 border border-blue-500/40 flex items-center justify-between transition group"
-                >
-                  <div>
-                    <div className="text-xs text-blue-300 font-medium">Police Control</div>
-                    <div className="text-lg font-black text-white group-hover:text-blue-200">100</div>
-                  </div>
-                  <PhoneCall className="w-5 h-5 text-blue-400 group-hover:scale-110 transition" />
-                </a>
-
-                <a
-                  href="tel:1554"
-                  className="p-3 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/40 flex items-center justify-between transition group"
-                >
-                  <div>
-                    <div className="text-xs text-cyan-300 font-medium">Coast Guard (Sea SAR)</div>
-                    <div className="text-lg font-black text-white group-hover:text-cyan-200">1554</div>
-                  </div>
-                  <Radio className="w-5 h-5 text-cyan-400 group-hover:scale-110 transition" />
-                </a>
-
-                <a
-                  href="tel:1073"
-                  className="p-3 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/40 flex items-center justify-between transition group"
-                >
-                  <div>
-                    <div className="text-xs text-amber-300 font-medium">Highway Helpline</div>
-                    <div className="text-lg font-black text-white group-hover:text-amber-200">1073</div>
-                  </div>
-                  <PhoneCall className="w-5 h-5 text-amber-400 group-hover:scale-110 transition" />
-                </a>
+            {/* Secondary National Hotlines */}
+            <div className="pt-2 border-t border-slate-800 flex justify-between text-[11px] text-slate-400">
+              <span>National Hotlines:</span>
+              <div className="flex gap-3 font-bold text-red-300">
+                <a href="tel:108" className="hover:underline">108 Ambulance</a>
+                <a href="tel:100" className="hover:underline">100 Police</a>
+                <a href="tel:1554" className="hover:underline">1554 Coast Guard</a>
+                <a href="tel:1073" className="hover:underline">1073 Highway</a>
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-slate-900 text-[11px] text-slate-400 border border-slate-800">
-              Notice: This incident has been recorded in the application database. Because no external SMS/GSM gateway subscription is configured, please use your device's cellular dialer above to speak directly to responders.
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setReportResult(null)}
-                className="px-4 py-2 text-xs rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300"
-              >
-                Log Another Alert
-              </button>
-              <button
-                onClick={onClose}
-                className="px-5 py-2 text-xs font-semibold rounded-xl bg-sky-600 hover:bg-sky-500 text-white"
-              >
-                Close
-              </button>
-            </div>
           </div>
         )}
 
