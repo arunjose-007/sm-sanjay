@@ -13,8 +13,12 @@ def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True, static_folder=static_folder, static_url_path='')
     app.config.from_object(config_class)
 
-    # Ensure the instance directory exists for SQLite database
-    os.makedirs(app.instance_path, exist_ok=True)
+    # Ensure the instance directory exists for SQLite database if not on Vercel read-only filesystem
+    if not os.environ.get('VERCEL'):
+        try:
+            os.makedirs(app.instance_path, exist_ok=True)
+        except Exception:
+            pass
 
     # Enable CORS for React frontend (Supports Localhost, LAN IPs, Mobile devices)
     CORS(app, supports_credentials=True, origins=r".*")

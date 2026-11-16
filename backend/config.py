@@ -1,8 +1,16 @@
 import os
 
 basedir = os.path.abspath(os.path.dirname(__file__))
-instance_dir = os.path.join(basedir, 'instance')
-os.makedirs(instance_dir, exist_ok=True)
+
+# If running on Vercel or read-only container, write SQLite to /tmp
+if os.environ.get('VERCEL'):
+    instance_dir = '/tmp'
+else:
+    instance_dir = os.path.join(basedir, 'instance')
+    try:
+        os.makedirs(instance_dir, exist_ok=True)
+    except Exception:
+        instance_dir = '/tmp'
 
 # Auto-load .env file if it exists
 def load_dotenv_custom():
@@ -31,7 +39,7 @@ db_file_path = os.path.join(instance_dir, 'livelihood_safety.db').replace('\\', 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'intelligent-assistant-secret-key-2026')
     
-    # Absolute path for SQLite to prevent relative path errors on Windows
+    # Absolute path for SQLite to prevent relative path errors on Windows / Vercel
     raw_db_url = os.environ.get('DATABASE_URL', '')
     if not raw_db_url or 'sqlite:///instance' in raw_db_url:
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_file_path}"
@@ -48,24 +56,6 @@ class Config:
     # Weather API Key (Optional for Open-Meteo fallback)
     WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY', '')
     
-    # Offline Ollama Configuration (Fallback if xAI Grok is unavailable)
-    OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')
-    OLLAMA_CHAT_URL = f"{OLLAMA_BASE_URL}/api/chat"
-    OLLAMA_TAGS_URL = f"{OLLAMA_BASE_URL}/api/tags"
-    OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.2:1b')
-    
-    # Open-Meteo Configuration (Free open API)
-    OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
-    
-    # Registered Emergency Contacts as specified (4 official numbers)
-    REGISTERED_EMERGENCY_CONTACTS = [
-        {'number': '6374926569', 'name': 'Emergency Contact 1', 'formatted': '+91 6374926569'},
-        {'number': '7305800510', 'name': 'Emergency Contact 2', 'formatted': '+91 7305800510'},
-        {'number': '8122603655', 'name': 'Emergency Contact 3', 'formatted': '+91 8122603655'},
-        {'number': '7395893275', 'name': 'Emergency Contact 4', 'formatted': '+91 7395893275'}
-    ]
-    
-    # Default Coordinates (Tamil Nadu, India)
-    DEFAULT_LATITUDE = 11.1271
-    DEFAULT_LONGITUDE = 78.6569
-    DEFAULT_LOCATION_NAME = "Tamil Nadu, India"
+    # Ollama Configuration
+    OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434')
+    OLLAMA_DEFAULT_MODEL = os.environ.get('OLLAMA_DEFAULT_MODEL', 'qwen2.5:1.5b')
