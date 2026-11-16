@@ -14,25 +14,40 @@ import { api } from './services/api';
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeSection, setActiveSection] = useState('dashboard'); // 'dashboard' | 'livelihood' | 'fisherman' | 'driver' | 'admin'
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isAIOpen, setIsAIOpen] = useState(false);
   const [isSOSOpen, setIsSOSOpen] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   // Check initial authentication
   useEffect(() => {
+    // 1. Check local storage
     const saved = localStorage.getItem('user');
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.username) {
-          setCurrentUser(parsed);
-        }
-      } catch (e) {
-        localStorage.removeItem('user');
-      }
+        setCurrentUser(JSON.parse(saved));
+      } catch (e) {}
+    } else {
+      // Default demo profile for seamless experience
+      const defaultUser = {
+        id: 2,
+        username: 'sanjai',
+        full_name: 'Sanjai',
+        role: 'user'
+      };
+      setCurrentUser(defaultUser);
+      localStorage.setItem('user', JSON.stringify(defaultUser));
     }
-    setIsLoadingAuth(false);
+
+    // 2. Verify with backend session
+    api.getCurrentUser()
+      .then(res => {
+        if (res.authenticated && res.user) {
+          setCurrentUser(res.user);
+          localStorage.setItem('user', JSON.stringify(res.user));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const handleLogout = async () => {
@@ -41,48 +56,26 @@ export default function App() {
     } catch (e) {}
     localStorage.removeItem('user');
     setCurrentUser(null);
-    setActiveSection('dashboard');
+    if (activeSection === 'admin') {
+      setActiveSection('dashboard');
+    }
   };
 
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
   };
 
-  // If not logged in, enforce login screen (cannot enter without login)
-  if (!currentUser && !isLoadingAuth) {
-    return (
-      <div className="min-h-screen bg-[#050c1a] text-slate-100 flex flex-col justify-center items-center">
-        <LoginModal
-          isOpen={true}
-          isMandatory={true}
-          onClose={() => {}}
-          onLoginSuccess={handleLoginSuccess}
-        />
-      </div>
-    );
-  }
-
-  if (isLoadingAuth) {
-    return (
-      <div className="min-h-screen bg-[#050c1a] flex items-center justify-center">
-        <div className="w-12 h-12 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin"></div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex flex-col bg-[#050c1a] text-slate-100 relative selection:bg-cyan-500 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#050c1a] text-slate-100 relative">
       
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
         activeSection={activeSection}
         setActiveSection={setActiveSection}
-        onOpenAuth={() => {}}
+        onOpenAuth={() => setIsAuthOpen(true)}
         onLogout={handleLogout}
         onOpenAdmin={() => setActiveSection('admin')}
-        onOpenAI={() => setIsAIOpen(true)}
         isAdminView={activeSection === 'admin'}
       />
 
@@ -129,15 +122,24 @@ export default function App() {
         )}
 
         {activeSection === 'admin' && (
-          <AdminDashboardPage onBack={() => setActiveSection('dashboard')} />
+          <AdminDashboardPage
+            onBack={() => setActiveSection('dashboard')}
+            currentUser={currentUser}
+          />
         )}
       </main>
 
-      {/* Floating & Modal Widgets */}
+      {/* Floating Overlays & Modals */}
+      <LoginModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
+      />
+
       <AIAssistantWidget
         isOpen={isAIOpen}
         onClose={() => setIsAIOpen(false)}
-        moduleContext={activeSection}
+        moduleContext={activeSection === 'dashboard' ? 'general' : activeSection}
         currentUser={currentUser}
       />
 
@@ -151,6 +153,18 @@ export default function App() {
         isOpen={isMapOpen}
         onClose={() => setIsMapOpen(false)}
       />
+
+      {/* Footer */}
+      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>Intelligent Assistant for Livelihood and Road Safety &copy; 2026</span>
+          <span className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            Offline AI Powered by Ollama • Free Open-Source Architecture
+          </span>
+        </div>
+      </footer>
+
     </div>
   );
 }
