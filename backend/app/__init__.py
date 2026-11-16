@@ -37,23 +37,30 @@ def create_app(config_class=Config):
     from app.routes.places import places_bp
     from app.routes.admin import admin_bp
 
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(livelihood_bp)
-    app.register_blueprint(fisherman_bp)
-    app.register_blueprint(driver_bp)
-    app.register_blueprint(ai_bp)
-    app.register_blueprint(emergency_bp)
-    app.register_blueprint(weather_bp)
-    app.register_blueprint(places_bp)
-    app.register_blueprint(admin_bp)
+    blueprints = [
+        (auth_bp, 'auth'),
+        (livelihood_bp, 'livelihood'),
+        (fisherman_bp, 'fisherman'),
+        (driver_bp, 'driver'),
+        (ai_bp, 'ai'),
+        (emergency_bp, 'emergency'),
+        (weather_bp, 'weather'),
+        (places_bp, 'places'),
+        (admin_bp, 'admin')
+    ]
+
+    for bp, name in blueprints:
+        app.register_blueprint(bp)
+        app.register_blueprint(bp, name=f"{name}_alt", url_prefix=f"/{name}")
 
     @app.route('/api/health', methods=['GET'])
+    @app.route('/health', methods=['GET'])
     def health_check():
         return jsonify({
             'status': 'healthy',
             'application': 'Intelligent Assistant for Livelihood and Road Safety',
-            'database': 'SQLite Local Storage',
-            'ai_engine': 'Ollama Local Instance'
+            'database': 'SQLite Storage',
+            'ai_engine': 'Ready'
         }), 200
 
     # Serve built React frontend if dist exists
@@ -72,13 +79,6 @@ def create_app(config_class=Config):
     # Initialize tables and seed default data
     with app.app_context():
         db.create_all()
-        # Ensure account_status column exists in users table
-        try:
-            from sqlalchemy import text
-            db.session.execute(text("ALTER TABLE users ADD COLUMN account_status VARCHAR(20) DEFAULT 'active'"))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
         seed_database()
 
     return app

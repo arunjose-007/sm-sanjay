@@ -1,16 +1,18 @@
 import os
+import tempfile
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# If running on Vercel or read-only container, write SQLite to /tmp
+# Cross-platform safe database storage (works on Windows, Linux, Vercel, Render)
 if os.environ.get('VERCEL'):
-    instance_dir = '/tmp'
+    instance_dir = os.path.join(tempfile.gettempdir(), 'intelligent_assistant')
 else:
     instance_dir = os.path.join(basedir, 'instance')
-    try:
-        os.makedirs(instance_dir, exist_ok=True)
-    except Exception:
-        instance_dir = '/tmp'
+
+try:
+    os.makedirs(instance_dir, exist_ok=True)
+except Exception:
+    instance_dir = tempfile.gettempdir()
 
 # Auto-load .env file if it exists
 def load_dotenv_custom():
@@ -34,7 +36,7 @@ def load_dotenv_custom():
 
 load_dotenv_custom()
 
-db_file_path = os.path.join(instance_dir, 'livelihood_safety.db').replace('\\', '/')
+db_file_path = os.path.abspath(os.path.join(instance_dir, 'livelihood_safety.db')).replace('\\', '/')
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'intelligent-assistant-secret-key-2026')

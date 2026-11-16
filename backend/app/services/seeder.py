@@ -19,14 +19,30 @@ def seed_database():
 
         sanjai = User(
             username='sanjai',
-            email='sanjai@example.com',
-            full_name='Sanjai Kumar',
+            email='sanjaimurugesan60@gmail.com',
+            full_name='Sanjai Murugesan',
             role='user'
         )
         sanjai.set_password('password123')
 
         db.session.add_all([admin, sanjai])
         db.session.commit()
+    else:
+        # Ensure sanjai / sanjaimurugesan60@gmail.com exists
+        existing = User.query.filter(
+            (db.func.lower(User.email) == 'sanjaimurugesan60@gmail.com') |
+            (db.func.lower(User.username) == 'sanjai')
+        ).first()
+        if not existing:
+            sanjai = User(
+                username='sanjai',
+                email='sanjaimurugesan60@gmail.com',
+                full_name='Sanjai Murugesan',
+                role='user'
+            )
+            sanjai.set_password('password123')
+            db.session.add(sanjai)
+            db.session.commit()
 
     # 2. Jobs
     if Job.query.count() == 0:
