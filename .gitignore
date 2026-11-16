@@ -3,10 +3,13 @@ node_modules/
 frontend/node_modules/
 */node_modules/
 
-# Production build outputs
+# Production build outputs & Vite cache
 dist/
 frontend/dist/
 build/
+.vite/
+frontend/.vite/
+*/.vite/
 
 # Python Virtual Environments & Bytecode
 venv/
