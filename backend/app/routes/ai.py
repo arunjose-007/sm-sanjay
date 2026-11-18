@@ -10,20 +10,35 @@ ai_bp = Blueprint('ai', __name__, url_prefix='/api/ai')
 
 @ai_bp.route('/status', methods=['GET'])
 def ai_status():
-    """Return live status of Grok API and Ollama local server."""
+    """Return live status of Groq Free Cloud, Gemini, Ollama, and xAI Grok."""
     catalog = AIManager.get_models_catalog()
     return jsonify({
-        'xai_grok': {
-            'configured': catalog['grok_configured'],
-            'model': current_app.config.get('XAI_MODEL', 'grok-3-mini'),
-            'provider': 'Official xAI Grok API'
+        'groq': {
+            'configured': catalog['groq_configured'],
+            'model': current_app.config.get('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+            'provider': 'Groq Cloud (Free Ultra-Fast LPUs)'
+        },
+        'gemini': {
+            'configured': catalog['gemini_configured'],
+            'model': current_app.config.get('GEMINI_MODEL', 'gemini-2.0-flash'),
+            'provider': 'Google Gemini (Free Tier)'
+        },
+        'openrouter': {
+            'configured': catalog['openrouter_configured'],
+            'model': current_app.config.get('OPENROUTER_MODEL', 'deepseek/deepseek-r1:free'),
+            'provider': 'OpenRouter (Free Tier)'
         },
         'ollama': {
             'online': catalog['ollama_online'],
             'base_url': catalog['ollama_base_url'],
             'installed_count': catalog['installed_count']
         },
-        'active_primary_engine': 'xAI Grok' if catalog['grok_configured'] else ('Ollama Local' if catalog['ollama_online'] else 'Offline Smart Engine')
+        'xai_grok': {
+            'configured': catalog['grok_configured'],
+            'model': current_app.config.get('XAI_MODEL', 'grok-2-latest'),
+            'provider': 'xAI Grok API'
+        },
+        'active_primary_engine': catalog.get('active_primary_engine', 'Auto')
     }), 200
 
 @ai_bp.route('/models', methods=['GET'])

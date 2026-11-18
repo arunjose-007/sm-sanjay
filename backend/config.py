@@ -57,10 +57,31 @@ class Config:
     XAI_API_KEY = os.environ.get('XAI_API_KEY', '')
     XAI_MODEL = os.environ.get('XAI_MODEL', 'grok-2-latest')
     XAI_API_URL = os.environ.get('XAI_API_URL', 'https://api.x.ai/v1/chat/completions')
-    
-    # Weather API Key (Optional for Open-Meteo fallback)
+
+    # Groq Cloud API (100% Free Tier - https://console.groq.com)
+    GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+    GROQ_MODEL = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+    GROQ_API_URL = os.environ.get('GROQ_API_URL', 'https://api.groq.com/openai/v1/chat/completions')
+
+    # Google Gemini API (100% Free Tier - https://aistudio.google.com)
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+    GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash')
+
+    # OpenRouter API (Free Models: deepseek-r1:free, llama-3.3-70b:free)
+    OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
+    OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'deepseek/deepseek-r1:free')
+    OPENROUTER_API_URL = os.environ.get('OPENROUTER_API_URL', 'https://openrouter.ai/api/v1/chat/completions')
+
+    # Open-Meteo Real-Time Weather API (100% Free, No Key Required)
+    OPEN_METEO_URL = os.environ.get('OPEN_METEO_URL', 'https://api.open-meteo.com/v1/forecast')
+    OPEN_METEO_GEO_URL = os.environ.get('OPEN_METEO_GEO_URL', 'https://geocoding-api.open-meteo.com/v1/search')
     WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY', '')
-    
-    # Ollama Configuration
+
+    # Default Region Telemetry (Tamil Nadu, India)
+    DEFAULT_LATITUDE = float(os.environ.get('DEFAULT_LATITUDE', 11.1271))
+    DEFAULT_LONGITUDE = float(os.environ.get('DEFAULT_LONGITUDE', 78.6569))
+    DEFAULT_LOCATION_NAME = os.environ.get('DEFAULT_LOCATION_NAME', 'Tamil Nadu, India')
+
+    # Ollama Local Configuration (Free Local LLMs: Qwen, DeepSeek, Llama, Gemma, Phi)
     OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434')
     OLLAMA_DEFAULT_MODEL = os.environ.get('OLLAMA_DEFAULT_MODEL', 'qwen2.5:1.5b')

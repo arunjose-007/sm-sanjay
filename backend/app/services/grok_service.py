@@ -33,9 +33,16 @@ GROK_AVAILABLE_MODELS = [
     }
 ]
 
+import time
+
 class GrokService:
+    _disabled_reason = None
+    _disabled_until = 0
+
     @staticmethod
     def is_configured():
+        if time.time() < GrokService._disabled_until:
+            return False
         api_key = current_app.config.get('XAI_API_KEY', '').strip()
         return bool(api_key and api_key != 'your_grok_api_key' and not api_key.startswith('your_'))
 
@@ -119,18 +126,22 @@ class GrokService:
                     'provider': 'xAI Grok (Cloud)'
                 }
             elif resp.status_code == 403:
+                GrokService._disabled_until = time.time() + 300
+                GrokService._disabled_reason = 'NO_CREDITS'
                 return {
                     'success': False,
                     'use_fallback': True,
                     'error': 'NO_CREDITS',
-                    'message': 'xAI Grok API team has 0 credits. Automatically routed to local Ollama engine.'
+                    'message': 'xAI Grok API team has 0 credits. Automatically routed to free engines.'
                 }
             elif resp.status_code == 401:
+                GrokService._disabled_until = time.time() + 300
+                GrokService._disabled_reason = 'INVALID_API_KEY'
                 return {
                     'success': False,
                     'use_fallback': True,
                     'error': 'INVALID_API_KEY',
-                    'message': 'xAI Grok API key is invalid or unauthorized. Automatically routed to local Ollama engine.'
+                    'message': 'xAI Grok API key is invalid. Automatically routed to free engines.'
                 }
             elif resp.status_code == 404:
                 # Try fallback to grok-2-latest if model wasn't found
@@ -176,9 +187,11 @@ class GrokService:
             if resp.status_code != 200:
                 err_msg = f"xAI Grok HTTP {resp.status_code}"
                 if resp.status_code == 403:
-                    err_msg = "xAI team has no credits. Falling back to local Ollama AI."
+                    GrokService._disabled_until = time.time() + 300
+                    err_msg = "xAI team has no credits. Falling back to free engines."
                 elif resp.status_code == 401:
-                    err_msg = "xAI key unauthorized. Falling back to local Ollama AI."
+                    GrokService._disabled_until = time.time() + 300
+                    err_msg = "xAI key unauthorized. Falling back to free engines."
 
                 yield {
                     'error': True,

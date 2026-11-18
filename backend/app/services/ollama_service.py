@@ -6,29 +6,63 @@ from flask import current_app
 
 logger = logging.getLogger(__name__)
 
-# List of popular open-source models supported by Ollama for user reference
+# List of popular free open-source models supported by Ollama & Local AI Master
 CATALOG_MODELS = [
-    {'name': 'llama3.2:3b', 'displayName': 'Llama 3.2 (3B)', 'description': 'Fast & powerful general AI (Meta)', 'family': 'Meta'},
-    {'name': 'qwen2.5:1.5b', 'displayName': 'Qwen 2.5 (1.5B)', 'description': 'Ultra-fast coding & multilingual reasoning (Alibaba)', 'family': 'Alibaba'},
-    {'name': 'deepseek-r1:1.5b', 'displayName': 'DeepSeek R1 (1.5B)', 'description': 'Advanced math, coding & deep reasoning (DeepSeek)', 'family': 'DeepSeek'},
-    {'name': 'gemma2:2b', 'displayName': 'Gemma 2 (2B)', 'description': 'High-speed lightweight open model (Google)', 'family': 'Google'},
-    {'name': 'llama3.2:1b', 'displayName': 'Llama 3.2 (1B)', 'description': 'Ultra-fast lightweight edge model (Meta)', 'family': 'Meta'},
-    {'name': 'qwen2.5:7b', 'displayName': 'Qwen 2.5 (7B)', 'description': 'Heavyweight multilingual reasoning (Alibaba)', 'family': 'Alibaba'},
-    {'name': 'deepseek-r1:7b', 'displayName': 'DeepSeek R1 (7B)', 'description': 'Heavyweight deep reasoning model (DeepSeek)', 'family': 'DeepSeek'},
-    {'name': 'mistral:7b', 'displayName': 'Mistral (7B)', 'description': 'Balanced speed and analytical intelligence (Mistral)', 'family': 'Mistral'}
+    {'name': 'qwen2.5:7b', 'displayName': 'Qwen 3.5 / 2.5 (9B/7B)', 'description': 'General AI chatbot with elite multilingual intelligence (Alibaba)', 'family': 'Alibaba', 'quality': 'Excellent'},
+    {'name': 'deepseek-r1:8b', 'displayName': 'DeepSeek R1 (8B)', 'description': 'Advanced chain-of-thought logical reasoning & math (DeepSeek)', 'family': 'DeepSeek', 'quality': 'Excellent'},
+    {'name': 'gpt-oss:20b', 'displayName': 'GPT-OSS (20B)', 'description': 'Advanced open-weight AI assistant for deep tasks', 'family': 'OpenSource', 'quality': 'Excellent'},
+    {'name': 'gemma2:9b', 'displayName': 'Gemma 4 / 2 (12B/9B)', 'description': 'General chat + analytical reasoning (Google)', 'family': 'Google', 'quality': 'Excellent'},
+    {'name': 'qwen2.5-coder:7b', 'displayName': 'Qwen 2.5 Coder (7B)', 'description': 'Programming, code generation & debugging (Alibaba)', 'family': 'Alibaba', 'quality': 'Excellent'},
+    {'name': 'llama3.1:8b', 'displayName': 'Llama 3.1 (8B)', 'description': 'General conversations & dialogue (Meta)', 'family': 'Meta', 'quality': 'Very Good'},
+    {'name': 'phi4:mini', 'displayName': 'Phi-4 Mini', 'description': 'Ultra-fast low-latency responses (Microsoft)', 'family': 'Microsoft', 'quality': 'Very Good'},
+    {'name': 'llama3.2:3b', 'displayName': 'Llama 3.2 (3B)', 'description': 'High-speed lightweight edge model (Meta)', 'family': 'Meta', 'quality': 'Good'}
 ]
 
+import socket
+import time
+
 class OllamaService:
-    @staticmethod
-    def get_base_url():
-        return current_app.config.get('OLLAMA_BASE_URL', 'http://localhost:11434').rstrip('/')
+    _cached_status = None
+    _cached_time = 0
 
     @staticmethod
-    def check_status():
+    def get_base_url():
+        return current_app.config.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
+
+    @staticmethod
+    def check_status(force=False):
         """Check if local Ollama server is reachable and retrieve installed models."""
+        now = time.time()
+        if not force and OllamaService._cached_status and (now - OllamaService._cached_time < 5):
+            return OllamaService._cached_status
+
         base_url = OllamaService.get_base_url()
+
+        # Fast socket check for local connection (avoids multi-second DNS/connection hangs)
+        if '127.0.0.1' in base_url or 'localhost' in base_url:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.25)
+                res = s.connect_ex(('127.0.0.1', 11434))
+                s.close()
+                if res != 0:
+                    status = {
+                        'online': False,
+                        'base_url': base_url,
+                        'installed_models': [],
+                        'installed_count': 0,
+                        'installed_names': [],
+                        'catalog_models': CATALOG_MODELS,
+                        'message': f"Ollama is not running on {base_url}. Start via 'ollama run <model>' in terminal."
+                    }
+                    OllamaService._cached_status = status
+                    OllamaService._cached_time = now
+                    return status
+            except Exception:
+                pass
+
         try:
-            resp = requests.get(f"{base_url}/api/tags", timeout=3)
+            resp = requests.get(f"{base_url}/api/tags", timeout=2)
             if resp.status_code == 200:
                 data = resp.json()
                 raw_models = data.get('models', [])
@@ -43,13 +77,17 @@ class OllamaService:
                     if 'qwen' in name_lower and 'coder' in name_lower:
                         display = f"Qwen 2.5 Coder ({size_gb}GB) — Programming & Debugging"
                     elif 'qwen' in name_lower:
-                        display = f"Qwen 2.5 ({size_gb}GB) — General AI Chatbot"
+                        display = f"Qwen 3.5 / 2.5 ({size_gb}GB) — General AI Chatbot"
                     elif 'deepseek' in name_lower:
                         display = f"DeepSeek R1 ({size_gb}GB) — Logical Reasoning & Math"
+                    elif 'gpt-oss' in name_lower or 'gpt' in name_lower:
+                        display = f"GPT-OSS ({size_gb}GB) — Advanced AI Assistant"
                     elif 'gemma' in name_lower:
-                        display = f"Gemma 2 ({size_gb}GB) — General Chat & Reasoning"
+                        display = f"Gemma 4 / 2 ({size_gb}GB) — General Chat & Reasoning"
+                    elif 'llama3.1' in name_lower or 'llama-3.1' in name_lower:
+                        display = f"Llama 3.1 ({size_gb}GB) — General Conversations"
                     elif 'llama' in name_lower:
-                        display = f"Llama 3.2 ({size_gb}GB) — General Conversations"
+                        display = f"Llama 3.2 / 3.1 ({size_gb}GB) — General Conversations"
                     elif 'phi' in name_lower:
                         display = f"Phi-4 Mini ({size_gb}GB) — Fast Responses"
                     else:
@@ -64,7 +102,7 @@ class OllamaService:
                         'installed': True
                     })
 
-                return {
+                status = {
                     'online': True,
                     'base_url': base_url,
                     'installed_models': formatted_models,
@@ -73,7 +111,10 @@ class OllamaService:
                     'catalog_models': CATALOG_MODELS,
                     'message': f"Ollama is running with {len(formatted_models)} installed model(s)."
                 }
-            return {
+                OllamaService._cached_status = status
+                OllamaService._cached_time = now
+                return status
+            status = {
                 'online': False,
                 'base_url': base_url,
                 'installed_models': [],
@@ -82,8 +123,11 @@ class OllamaService:
                 'catalog_models': CATALOG_MODELS,
                 'message': f"Ollama responded with status code {resp.status_code}."
             }
+            OllamaService._cached_status = status
+            OllamaService._cached_time = now
+            return status
         except requests.exceptions.RequestException:
-            return {
+            status = {
                 'online': False,
                 'base_url': base_url,
                 'installed_models': [],
@@ -92,6 +136,9 @@ class OllamaService:
                 'catalog_models': CATALOG_MODELS,
                 'message': f"Ollama is not running on {base_url}. Start Ollama via 'ollama run <model>' in terminal."
             }
+            OllamaService._cached_status = status
+            OllamaService._cached_time = now
+            return status
 
     @staticmethod
     def get_installed_models():

@@ -516,8 +516,13 @@ export default function AIAssistantWidget({
   // Starters cards for empty chat state
   const starterPrompts = [
     {
-      title: "💻 Python Code & Math",
-      desc: "Write algorithms, debug code, or solve complex calculations.",
+      title: "🌤️ Live Climate & Weather",
+      desc: "Real-time live temperature, rain, wind & 5-day forecast for today.",
+      prompt: "What is today's climate in Chennai? Give me the verified live weather report for today (18-11-2026)."
+    },
+    {
+      title: "💻 Free AI & Python Coding",
+      desc: "Qwen 2.5 Coder & DeepSeek R1 for algorithms and debugging.",
       prompt: "Write a complete Python script to track GPS coordinates, calculate distance between waypoints, and find the nearest emergency hospital."
     },
     {
@@ -539,11 +544,6 @@ export default function AIAssistantWidget({
       title: "🚨 Emergency Helplines & SOS",
       desc: "All 4 registered helpline numbers & hospital response.",
       prompt: "List all official emergency helpline phone numbers registered in this app and the immediate first-aid steps for road accidents."
-    },
-    {
-      title: "🌐 Tamil / தமிழ் வழிகாட்டுதல்",
-      desc: "Fluently supports Tamil & Tanglish inquiries.",
-      prompt: "விவசாயிகள் மற்றும் மீனவர்களுக்கான முக்கிய அரசு நலத்திட்டங்கள் மற்றும் உதவி எண்களை தமிழில் விவரிக்கவும்."
     }
   ];
 
@@ -593,17 +593,51 @@ export default function AIAssistantWidget({
               onChange={(e) => setSelectedModel(e.target.value)}
               className="bg-slate-900 border border-cyan-500/40 text-cyan-300 hover:text-white text-xs font-semibold rounded-xl px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition cursor-pointer appearance-none max-w-[200px] sm:max-w-[260px] truncate"
             >
-              <option value="auto">✨ Auto (Fastest Engine)</option>
+              <option value="auto">✨ Auto (Best Free Engine)</option>
               
-              <optgroup label="☁️ xAI Grok (Cloud API)">
-                <option value="xai:grok-3-mini">xAI Grok 3 Mini (Default Fast)</option>
-                <option value="xai:grok-2-latest">xAI Grok 2 (High Reasoning)</option>
-                <option value="xai:grok-beta">xAI Grok Beta (Ultra-Fast)</option>
-              </optgroup>
-
               {availableModels.filter(m => m.provider === 'ollama').length > 0 && (
-                <optgroup label="🦙 Ollama (Local AI Models)">
+                <optgroup label="🦙 Ollama Local AI (100% Free & Private)">
                   {availableModels.filter(m => m.provider === 'ollama').map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+
+              {availableModels.filter(m => m.provider === 'groq').length > 0 && (
+                <optgroup label="⚡ Free Cloud AI (Groq LPUs - Ultra Fast)">
+                  {availableModels.filter(m => m.provider === 'groq').map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+
+              {availableModels.filter(m => m.provider === 'gemini').length > 0 && (
+                <optgroup label="✨ Google Gemini (Free Cloud)">
+                  {availableModels.filter(m => m.provider === 'gemini').map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+
+              {availableModels.filter(m => m.provider === 'openrouter').length > 0 && (
+                <optgroup label="🌐 OpenRouter (Free Tier)">
+                  {availableModels.filter(m => m.provider === 'openrouter').map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+
+              {availableModels.filter(m => m.provider === 'xai').length > 0 && (
+                <optgroup label="☁️ xAI Grok (Cloud API)">
+                  {availableModels.filter(m => m.provider === 'xai').map(m => (
                     <option key={m.id} value={m.id}>
                       {m.displayName}
                     </option>
